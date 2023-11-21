@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <title>earth</title>
+  <script src="../../libs/Build/Cesium/Cesium.js"></script>
+  <script type="text/javascript" src="../../libs/Apps/Sandcastle/Sandcastle-header.js"></script>
+  <link rel="stylesheet" href="../../libs/Build/Cesium/Widgets/widgets.css">
+
+  <style>
+    html,
+    body {
+      margin: 0px;
+      padding: 0px;
+    }
+
+    #cesiumContainer {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+    }
+
+    .toolbar {
+      position: absolute;
+      top: 10px;
+      left: 20px;
+      background-color: rgba(0, 0, 0, 0.6);
+    }
+  </style>
+</head>
+
+<body>
+  <div id="cesiumContainer"></div>
+  <div class="toolbar">
+    <label style="color: white;">等高距
+      <input type="range" min="0" max="1000" step="1" oninput="change()" id="HeightSpa" value="150">
+      <input type="text" style="width: 70px;" id="HeightSpaValue" value="150"
+        onchange="heightSpaValue"><br></label><br />
+    <label style="color: white;">线宽
+      <input type="range" min="0" max="20" step="1" oninput="change()" id="LineWid" value="2">
+      <input type="text" style="width: 70px;" id="LineWidValue" value="2" onchange="lineWidValue()"><br></label><br />
+  </div>
+  <script>
+    // Cesium.Ion.defaultAccessToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiIxMjMwNzMxMi05YWU0LTQyODAtOWFiOS03ZTFiYmE0NjIzNTkiLCJpZCI6MTc3MjYwLCJpYXQiOjE2OTk1NzIyNzN9.zr32dn5dF2SkcWtUd7fd2f_4t9Yh0B5VpnuLrbaulcQ';
+
+    const Viewer = new Cesium.Viewer('cesiumContainer', {
+      imageryProvider: new Cesium.WebMapTileServiceImageryProvider({
+        url: "http://t0.tianditu.com/img_w/wmts?service=wmts&request=GetTile&version=1.0.0&LAYER=img&tileMatrixSet=w&TileMatrix={TileMatrix}&TileRow={TileRow}&TileCol={TileCol}&style=default&format=tiles&tk=3452d60a4496045c2ac6ec3d57f7a567",
+        subdomains: ['0', '1', '2', '3', '4', '5', '6', '7'],
+        layer: "tdtBasicLayer",
+        style: "default",
+        format: "image/jpeg",
+        tileMatrixSetID: "GoogleMapsCompatible",
+      }),
+      terrain: Cesium.Terrain.fromWorldTerrain({
+        // requestVertexNormals: true,
+        // requestWaterMask: true 只能在小地形中显示
+      }), // 地形数据
+    });
+
+
+
+
+
+    // viewer.scene.globe.enableLighting = true;
+    // viewer.terrain = terrain;
+    // console.log("Viewer",Viewer.terrainProvider);
+
+    //  Sandcastle.addDefaultToolbarButton("Default styling", function () {
+    var tiletest = Viewer.dataSources.add(
+      Cesium.GeoJsonDataSource.load(
+        "../../shp/geojson/xhqSHPCS2000_R_1.json", {
+        // fill: Cesium.Color.TRANSPARENT,
+        stroke: Cesium.Color.BLACK,
+        fill: Cesium.Color.RED.withAlpha(0.2),
+        // fill: Cesium.Color.RED,
+        // stroke: Cesium.Color.BLACK,
+        strokeWidth: 3,
+        clampToGround: true
+
+      }
+      )
+    );
+    Viewer.zoomTo(tiletest);
+    // 实例化屏幕空间事件对象ScreenSpaceEventHandler
+    var handler = new Cesium.ScreenSpaceEventHandler(Viewer.canvas);
+    var annotations = Viewer.scene.primitives.add(
+      new Cesium.LabelCollection()
+    );
+    //添加点
+    function createPoint(worldPosition) {
+
+      var point = Viewer.entities.add({
+        point: {
+          Color: Cesium.Color.CEIMSON,
+          pixelSize: 9,
+          outlineColor: Cesium.Color.ALICEBLUE,
+          outlineWidth: 2,
+          disableDepthTestDistance: 1000//当距离在1000以下时不被遮挡
+        }
+      }
+      );
+      return point;
+    }
+    //添加点和标注框
+    function annotate(cartesian, lng, lat, height) {
+      //创建点
+      createPoint(cartesian);
+      //添加标注框
+      annotations.add({
+        position: cartesian,
+        text:
+          'Lon:' + lng.toFixed(5) + '\u00B0' +
+          '\nLat:' + lat.toFixed(5) + '\u00B0' +
+          "\nheight:" + height.toFixed(2) + "m",
+        showBackground: true,
+        font: '22px monospace',
+        horizontalOrgin: Cesium.HorizontalOrigin.LEFT,
+        verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+        disableDepthTestDistance: Number.POSITIVE_INFINITY
+      });
+    }
+    //鼠标左键单击事件
+    handler.setInputAction(function (evt) {
+      var pickedObject = Viewer.scene.pick(evt.position);
+      var ray = Viewer.camera.getPickRay(evt.position);
+      var cartesian = Viewer.scene.globe.pick(ray, Viewer.scene);
+      if (Cesium.defined(cartesian)) {
+        var cartographic = Cesium.Cartographic.fromCartesian(cartesian);
+        var lng = Cesium.Math.toDegrees(cartographic.longitude);
+        var lat = Cesium.Math.toDegrees(cartographic.latitude);
+        var height = cartographic.height;
+        annotate(cartesian, lng, lat, height);
+      }
+
+    }, Cesium.ScreenSpaceEventType.LEFT_CLICK
+    );
+    //使用右键单击，删除点和框
+    handler.setInputAction(function () {
+      //删除点
+      // Viewer.entities.removeAll()
+      annotations.removeAll();
+    }, Cesium.ScreenSpaceEventType.RIGHT_CLICK
+    )
+    function change() {
+      //获取等高距滑动条当前值
+      var HS = Number(HeightSpa.value);
+      //等高距文本框显示当前值
+      HeightSpaValue.value = HS;
+      //获取线宽滑动条当前值
+      var LW = Number(LineWid.value);
+      //线框文本显示当前值
+      LineWidValue.value = LW;
+
+      //创建等高线材质
+      var material = Cesium.Material.fromType("ElevationContour");
+      var contourUniforms = {};
+      //等高距
+      contourUniforms.spacing = 150;
+      //线宽
+      contourUniforms.width = 2;
+      //颜色
+      contourUniforms.color = Cesium.Color.BLUE;
+      material.uniforms = contourUniforms;
+      //设置材质
+      Viewer.scene.globe.material = material;
+    }
+    //等高距文本框
+    function heightSpaValue() {
+      var HS = Number(HeightSpaValue.value);
+      HeightSpa.value = HS;
+      change();
+    }
+    //线框文本框
+    function lineWidValue() {
+      var LW = Number(LineWidValue.value);
+      LineWid.value = LW;
+      change();
+    }
+
+    var addPoint = {
+      id: 'point1',
+      name: '最低点',
+      show: true,
+      position: Cesium.Cartesian3.fromDegrees(121.58011, 41.95160, 124.00),
+      point: {
+        pixelSize: 5,// 大小
+        color: Cesium.Color.RED, //点的颜色
+      }
+    }
+    var addPoint1 = {
+      id: 'point2',
+      name: '最高点',
+      show: true,
+      position: Cesium.Cartesian3.fromDegrees(121.57943, 42.11185, 380.00),
+      point: {
+        pixelSize: 5,// 大小
+        color: Cesium.Color.RED, //点的颜色
+      }
+    }
+    // {
+    //   id: 'point2',
+    //   name: '最高点',
+    //   show: true,
+    //   position: Cesium.Cartesian3.fromDegrees(121.57963, 42.11231, 360.38),
+    //   point: {
+    //     pixelSize: 5,// 大小
+    //     color: Cesium.Color.RED, //点的颜色
+    //   },
+    //   text: '2'
+    // }]
+    Viewer.entities.add(addPoint);
+    Viewer.entities.add(addPoint1);
+
+    const poin = [{
+      id: '1',
+      name: "最高点",
+      type: "固定枪机",
+      state: "在线",
+      position: {
+        x: 121.5794,
+        y: 42.11185,
+      },
+      text: '1'
+    }, {
+      id: '2',
+      name: "最低点",
+      type: "固定枪机",
+      state: "在线",
+      position: {
+        x: 121.58011,
+        y: 41.95160,
+      },
+      text: '2'
+    }]
+    function addEntity(e) {
+      let pinBuilder = new Cesium.PinBuilder()
+      // debugger
+      e.map(res => {
+        let poin = Viewer.entities.add({
+          id: res.id,
+          name: res.name,
+          position: Cesium.Cartesian3.fromDegrees(res.position.x, res.position.y),
+          billboard: {
+            image: pinBuilder.fromText(res.text, Cesium.Color.ROYALBLUE, 48).toDataURL(),
+            verticalOrigin: Cesium.VerticalOrigin.BOTTOM
+          },
+          monitoItems: {
+            data: res
+          },
+        })
+      })
+      return e
+    }
+
+    //加载点
+    addEntity(poin)
+    //添加弹窗
+    function leftDownAction() {
+      var handler = new Cesium.ScreenSpaceEventHandler(Viewer.scene.canvas);
+      handler.setInputAction(function (movement) {
+        var picked = Viewer.scene.pick(movement.position)
+        if (Cesium.defined(picked) && picked.id.id) {
+          Popupposition(picked)//弹窗位置控制
+          let id = picked.id.id
+          let name = picked.id._name
+          document.getElementById('title').innerHTML = name
+          let monitoItems = picked.id.monitoItems
+          document.getElementById('state').innerHTML = monitoItems.data.state
+          document.getElementById('type').innerHTML = monitoItems.data.type
+        } else {
+          return
+        }
+      }, Cesium.ScreenSpaceEventType.LEFT_CLICK)
+    }
+    leftDownAction()
+    //控制弹窗位置
+    function Popupposition(e) {
+      let data = e.id.monitoItems.data
+      //经纬度转为世界坐标
+      let gisPosition = Cesium.Cartesian3.fromDegrees(
+        data.position.x,
+        data.position.y,
+        0
+      );
+      document.getElementById('stateShow').style.display = 'block' //弹出信息框
+      //实时更新位置
+      viewer.scene.postRender.addEventListener(() => {
+        //转化为屏幕坐标
+        var windowPosition = Cesium.SceneTransforms.wgs84ToWindowCoordinates(viewer.scene, gisPosition);
+        document.getElementById('stateShow').style.left = (windowPosition.x - 150) + 'px'
+        document.getElementById('stateShow').style.top = (windowPosition.y - 220) + 'px'
+      })
+    }
+
+    //     this.viewer.scene.fxaa = false
+    // this.viewer.scene.postProcessStages.fxaa.enabled = false
+    // if (Cesium.FeatureDetection.supportsImageRenderingPixelated()) { //判断是否支持图像渲染像素化处理
+    //   this.viewer.resolutionScale = window.devicePixelRatio;
+    // }
+
+
+  </script>
+</body>
+
+</html>
